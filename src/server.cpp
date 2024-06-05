@@ -55,9 +55,33 @@ int main(int argc, char **argv) {
   
   int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
   std::cout << "Client connected\n";
+
+
+  char buffer[1000000] = { 0 }; 
+  recv(client_fd, buffer, sizeof(buffer), 0); 
+  std::string temp(buffer);
+  std::cout << "Message from client: " << temp <<"\n";  
+
+  std::string okMessage = "HTTP/1.1 200 OK\r\n\r\n";
+  std::string notFoundMessage = "HTTP/1.1 404 Not Found\r\n\r\n";
   
-  std::string message = "HTTP/1.1 200 OK\r\n\r\n";
-  send(client_fd, message.c_str(), message.length(), 0);
+  // Process the request
+  std::string httpRequestLine = temp.substr(0, temp.find("\r\n", 0));
+  std::string httpRequestMethod = httpRequestLine.substr(0, httpRequestLine.find(" ", 0));
+  std::string httpRequestURL = httpRequestLine.substr(httpRequestMethod.size() + 1, httpRequestLine.find("HTTP", httpRequestMethod.size()) - httpRequestMethod.size() - 2);
+
+
+  std:: cout<< httpRequestLine <<"\n";
+  std:: cout<< httpRequestMethod <<"\n";
+  std:: cout<< httpRequestURL <<"\n";
+
+  if(httpRequestURL.size() == 1 && httpRequestURL.compare("/") == 0) {
+    send(client_fd, okMessage.c_str(), okMessage.length(), 0);
+  }
+  else {
+    send(client_fd, notFoundMessage.c_str(), notFoundMessage.length(), 0);
+  }
+
   close(server_fd);
 
   return 0;
