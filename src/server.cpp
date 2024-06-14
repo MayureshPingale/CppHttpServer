@@ -64,18 +64,31 @@ int main(int argc, char **argv) {
 
   std::string okMessage = "HTTP/1.1 200 OK\r\n\r\n";
   std::string notFoundMessage = "HTTP/1.1 404 Not Found\r\n\r\n";
-  
+  std::string stringResponseMessgae = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n";  
+  std::string clrf = "\r\n";
+
   // Process the request
   std::string httpRequestLine = temp.substr(0, temp.find("\r\n", 0));
   std::string httpRequestMethod = httpRequestLine.substr(0, httpRequestLine.find(" ", 0));
-  std::string httpRequestURL = httpRequestLine.substr(httpRequestMethod.size() + 1, httpRequestLine.find("HTTP", httpRequestMethod.size()) - httpRequestMethod.size() - 2);
+  std::string httpRequestURL = httpRequestLine.substr(httpRequestMethod.size() + 1, httpRequestLine.find("HTTP", httpRequestMethod.size()) - 5);
 
 
   std:: cout<< httpRequestLine <<"\n";
   std:: cout<< httpRequestMethod <<"\n";
   std:: cout<< httpRequestURL <<"\n";
 
-  if(httpRequestURL.size() == 1 && httpRequestURL.compare("/") == 0) {
+  if(httpRequestURL.rfind("/echo/", 0) == 0) {
+    std::string stringFromEchoURL = httpRequestURL.substr(6);
+    std::cout<<"String retieved: " << stringFromEchoURL <<"\n";
+    stringResponseMessgae.append("Content-Length: ");
+    stringResponseMessgae.append(std::to_string(stringFromEchoURL.size()));
+    stringResponseMessgae.append(clrf);
+    stringResponseMessgae.append(clrf);
+    stringResponseMessgae.append(stringFromEchoURL);
+    std::cout<<stringResponseMessgae<<"\n";
+    send(client_fd, stringResponseMessgae.c_str(), stringResponseMessgae.length(), 0);
+  }
+  else if(httpRequestURL.size() == 1 && httpRequestURL.compare("/") == 0) {
     send(client_fd, okMessage.c_str(), okMessage.length(), 0);
   }
   else {
