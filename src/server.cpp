@@ -7,6 +7,40 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <unordered_map>
+
+
+std::string clrf = "\r\n";
+
+
+std::unordered_map<std::string, std::string> getAllHeaders(std:: string httpHeaders) {
+  std::unordered_map<std::string, std::string> headerMaps;
+  std::string del =  clrf;
+  int start, end = -1*del.size();
+    do {
+        start = end + del.size();
+        end = httpHeaders.find(del, start);
+
+        if(start >= end) {
+          break;
+        }
+
+        std:: string httpHeaderKeyValue = httpHeaders.substr(start, end - start);
+        std:: string headerKey = httpHeaderKeyValue.substr(0, httpHeaderKeyValue.find(":"));
+        std:: string headerValue= httpHeaderKeyValue.substr(httpHeaderKeyValue.find(":") + 2);
+        // std:: cout << headerKey <<"\n";
+        // std:: cout << headerValue<< "\n";
+        headerMaps.insert({headerKey, headerValue});
+    } while (end != -1);
+
+  return headerMaps;
+}
+
+void appendHeaders(std::string& responsestring, std::string key, std::string value) {
+  responsestring.append(key);
+  responsestring.append(value);
+  responsestring.append(clrf);
+}
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -64,29 +98,38 @@ int main(int argc, char **argv) {
 
   std::string okMessage = "HTTP/1.1 200 OK\r\n\r\n";
   std::string notFoundMessage = "HTTP/1.1 404 Not Found\r\n\r\n";
-  std::string stringResponseMessgae = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n";  
-  std::string clrf = "\r\n";
+  std::string plainStringResponseMessage = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n";  
 
   // Process the request
   std::string httpRequestLine = temp.substr(0, temp.find("\r\n", 0));
   std::string httpRequestMethod = httpRequestLine.substr(0, httpRequestLine.find(" ", 0));
   std::string httpRequestURL = httpRequestLine.substr(httpRequestMethod.size() + 1, httpRequestLine.find("HTTP", httpRequestMethod.size()) - 5);
-
-
+  std::string httpHeaders = temp.substr(httpRequestLine.size() + 1, temp.find_last_of(clrf) - clrf.size());  
+  
   std:: cout<< httpRequestLine <<"\n";
   std:: cout<< httpRequestMethod <<"\n";
   std:: cout<< httpRequestURL <<"\n";
+  std:: cout<< httpHeaders<<"\n";
 
-  if(httpRequestURL.rfind("/echo/", 0) == 0) {
+  
+  std::unordered_map<std::string, std::string> headersMap = getAllHeaders(httpHeaders);
+
+  
+  if(httpRequestURL.rfind("/user-agent",0) == 0) {
+    appendHeaders(plainStringResponseMessage, "Content-Length: ", std::to_string(headersMap["User-Agent"].size()));
+    
+    plainStringResponseMessage.append(clrf);
+    plainStringResponseMessage.append(headersMap["User-Agent"]);
+    send(client_fd, plainStringResponseMessage.c_str(), plainStringResponseMessage.length(), 0);
+  }
+  else if(httpRequestURL.rfind("/echo/", 0) == 0) {
     std::string stringFromEchoURL = httpRequestURL.substr(6);
     std::cout<<"String retieved: " << stringFromEchoURL <<"\n";
-    stringResponseMessgae.append("Content-Length: ");
-    stringResponseMessgae.append(std::to_string(stringFromEchoURL.size()));
-    stringResponseMessgae.append(clrf);
-    stringResponseMessgae.append(clrf);
-    stringResponseMessgae.append(stringFromEchoURL);
-    std::cout<<stringResponseMessgae<<"\n";
-    send(client_fd, stringResponseMessgae.c_str(), stringResponseMessgae.length(), 0);
+    appendHeaders(plainStringResponseMessage, "Content-Length: ", std::to_string(stringFromEchoURL.size()));
+
+    plainStringResponseMessage.append(clrf);
+    plainStringResponseMessage.append(stringFromEchoURL);
+    send(client_fd, plainStringResponseMessage.c_str(), plainStringResponseMessage.length(), 0);
   }
   else if(httpRequestURL.size() == 1 && httpRequestURL.compare("/") == 0) {
     send(client_fd, okMessage.c_str(), okMessage.length(), 0);
