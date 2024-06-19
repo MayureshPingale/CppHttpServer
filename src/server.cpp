@@ -80,7 +80,7 @@ void processClient(int client_fd, std:: string directoryName) {
       fileName.erase(fileName.size() - 1);
     }
 
-    std::string finalPath = directoryName + fileName.append(".txt");
+    std::string finalPath = directoryName + fileName;
     std:: cout << "Final File Path: " << finalPath << "\n";
 
     if(httpRequestMethod.compare("POST") == 0) {
