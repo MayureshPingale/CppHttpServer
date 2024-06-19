@@ -11,9 +11,8 @@
 #include <thread>
 #include <fstream>
 
-
-
 std::string clrf = "\r\n";
+
 void appendHeaders(std::string& responsestring, std::string key, std::string value) {
   responsestring.append(key);
   responsestring.append(value);
@@ -35,8 +34,6 @@ std::unordered_map<std::string, std::string> getAllHeaders(std:: string httpHead
         std:: string httpHeaderKeyValue = httpHeaders.substr(start, end - start);
         std:: string headerKey = httpHeaderKeyValue.substr(0, httpHeaderKeyValue.find(":"));
         std:: string headerValue= httpHeaderKeyValue.substr(httpHeaderKeyValue.find(":") + 2);
-        // std:: cout << headerKey <<"\n";
-        // std:: cout << headerValue<< "\n";
         headerMaps.insert({headerKey, headerValue});
     } while (end != -1);
 
@@ -54,18 +51,20 @@ void processClient(int client_fd, std:: string directoryName) {
   std::string notFoundMessage = "HTTP/1.1 404 Not Found\r\n\r\n";
   std::string plainStringResponseMessage = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n";
   std::string multimediaStringResponseMessage = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n";   
+  std::string createdResponseMessage = "HTTP/1.1 201 Created\r\n\r\n";
 
   // Process the request
   std::string httpRequestLine = temp.substr(0, temp.find("\r\n", 0));
   std::string httpRequestMethod = httpRequestLine.substr(0, httpRequestLine.find(" ", 0));
   std::string httpRequestURL = httpRequestLine.substr(httpRequestMethod.size() + 1, httpRequestLine.find("HTTP", httpRequestMethod.size()) - 5);
-  std::string httpHeaders = temp.substr(httpRequestLine.size() + 1, temp.find_last_of(clrf) - clrf.size());  
+  std::string httpHeaders = temp.substr(httpRequestLine.size() + 1, temp.find_last_of(clrf) - clrf.size());
+  std::string httpBody = temp.substr(temp.find_last_of(clrf) + 1); 
   
   std:: cout<< httpRequestLine <<"\n";
   std:: cout<< httpRequestMethod <<"\n";
   std:: cout<< httpRequestURL <<"\n";
   std:: cout<< httpHeaders<<"\n";
-
+  std:: cout << httpBody << "\n";
   
   std::unordered_map<std::string, std::string> headersMap = getAllHeaders(httpHeaders);
 
@@ -80,9 +79,16 @@ void processClient(int client_fd, std:: string directoryName) {
     std::string finalPath = directoryName + fileName;
     std:: cout << "Final File Path: " << finalPath << "\n";
 
-
+    if(httpRequestMethod.compare("POST") == 0) {
+      std::ofstream MyFile(finalPath);
+      
+      MyFile << httpBody;
+      MyFile.close();
+      std:: cout << "Sending Reply: " << createdResponseMessage <<"\n";  
+      send(client_fd, createdResponseMessage.c_str(), createdResponseMessage.length(), 0);
+    }
+    else{
       std::ifstream ifs(finalPath);
-
       if(ifs.is_open()) {
         std::string contents((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
         
@@ -98,6 +104,7 @@ void processClient(int client_fd, std:: string directoryName) {
         std:: cout << "Sending Reply: " << notFoundMessage <<"\n";
         send(client_fd, notFoundMessage.c_str(), notFoundMessage.length(), 0);
       }
+    }
   }
   else if(httpRequestURL.rfind("/user-agent",0) == 0) {
     appendHeaders(plainStringResponseMessage, "Content-Length: ", std::to_string(headersMap["User-Agent"].size()));
