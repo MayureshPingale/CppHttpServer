@@ -8,10 +8,15 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unordered_map>
+#include <thread>
 
 
 std::string clrf = "\r\n";
-
+void appendHeaders(std::string& responsestring, std::string key, std::string value) {
+  responsestring.append(key);
+  responsestring.append(value);
+  responsestring.append(clrf);
+}
 
 std::unordered_map<std::string, std::string> getAllHeaders(std:: string httpHeaders) {
   std::unordered_map<std::string, std::string> headerMaps;
@@ -36,10 +41,60 @@ std::unordered_map<std::string, std::string> getAllHeaders(std:: string httpHead
   return headerMaps;
 }
 
-void appendHeaders(std::string& responsestring, std::string key, std::string value) {
-  responsestring.append(key);
-  responsestring.append(value);
-  responsestring.append(clrf);
+
+void processClient(int client_fd) {
+  char buffer[1000000] = { 0 }; 
+  recv(client_fd, buffer, sizeof(buffer), 0); 
+  std::string temp(buffer);
+  std::cout << "Message from client: " << temp <<"\n";  
+
+  std::string okMessage = "HTTP/1.1 200 OK\r\n\r\n";
+  std::string notFoundMessage = "HTTP/1.1 404 Not Found\r\n\r\n";
+  std::string plainStringResponseMessage = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n";  
+
+  // Process the request
+  std::string httpRequestLine = temp.substr(0, temp.find("\r\n", 0));
+  std::string httpRequestMethod = httpRequestLine.substr(0, httpRequestLine.find(" ", 0));
+  std::string httpRequestURL = httpRequestLine.substr(httpRequestMethod.size() + 1, httpRequestLine.find("HTTP", httpRequestMethod.size()) - 5);
+  std::string httpHeaders = temp.substr(httpRequestLine.size() + 1, temp.find_last_of(clrf) - clrf.size());  
+  
+  std:: cout<< httpRequestLine <<"\n";
+  std:: cout<< httpRequestMethod <<"\n";
+  std:: cout<< httpRequestURL <<"\n";
+  std:: cout<< httpHeaders<<"\n";
+
+  
+  std::unordered_map<std::string, std::string> headersMap = getAllHeaders(httpHeaders);
+
+  
+  if(httpRequestURL.rfind("/user-agent",0) == 0) {
+    appendHeaders(plainStringResponseMessage, "Content-Length: ", std::to_string(headersMap["User-Agent"].size()));
+    
+    plainStringResponseMessage.append(clrf);
+    plainStringResponseMessage.append(headersMap["User-Agent"]);
+    std:: cout << "Sending Reply: " << plainStringResponseMessage <<"\n";
+    send(client_fd, plainStringResponseMessage.c_str(), plainStringResponseMessage.length(), 0);
+  }
+  else if(httpRequestURL.rfind("/echo/", 0) == 0) {
+    std::string stringFromEchoURL = httpRequestURL.substr(6);
+    std::cout<<"String retieved: " << stringFromEchoURL <<"\n";
+    appendHeaders(plainStringResponseMessage, "Content-Length: ", std::to_string(stringFromEchoURL.size()));
+
+    plainStringResponseMessage.append(clrf);
+    plainStringResponseMessage.append(stringFromEchoURL);
+    std:: cout << "Sending Reply: " << plainStringResponseMessage <<"\n";
+    send(client_fd, plainStringResponseMessage.c_str(), plainStringResponseMessage.length(), 0);
+  }
+  else if(httpRequestURL.size() == 1 && httpRequestURL.compare("/") == 0) {
+    std:: cout << "Sending Reply: " << okMessage <<"\n";
+    send(client_fd, okMessage.c_str(), okMessage.length(), 0);
+  }
+  else {
+    std:: cout << "Sending Reply: " << notFoundMessage <<"\n";
+    send(client_fd, notFoundMessage.c_str(), notFoundMessage.length(), 0);
+  }
+
+  close(client_fd);
 }
 
 int main(int argc, char **argv) {
@@ -82,61 +137,20 @@ int main(int argc, char **argv) {
     return 1;
   }
   
-  struct sockaddr_in client_addr;
-  int client_addr_len = sizeof(client_addr);
   
-  std::cout << "Waiting for a client to connect...\n";
   
-  int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
-  std::cout << "Client connected\n";
-
-
-  char buffer[1000000] = { 0 }; 
-  recv(client_fd, buffer, sizeof(buffer), 0); 
-  std::string temp(buffer);
-  std::cout << "Message from client: " << temp <<"\n";  
-
-  std::string okMessage = "HTTP/1.1 200 OK\r\n\r\n";
-  std::string notFoundMessage = "HTTP/1.1 404 Not Found\r\n\r\n";
-  std::string plainStringResponseMessage = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n";  
-
-  // Process the request
-  std::string httpRequestLine = temp.substr(0, temp.find("\r\n", 0));
-  std::string httpRequestMethod = httpRequestLine.substr(0, httpRequestLine.find(" ", 0));
-  std::string httpRequestURL = httpRequestLine.substr(httpRequestMethod.size() + 1, httpRequestLine.find("HTTP", httpRequestMethod.size()) - 5);
-  std::string httpHeaders = temp.substr(httpRequestLine.size() + 1, temp.find_last_of(clrf) - clrf.size());  
+  while (true){
+    struct sockaddr_in client_addr;
+    int client_addr_len = sizeof(client_addr);
+    std::cout << "Waiting for a client to connect...\n";
   
-  std:: cout<< httpRequestLine <<"\n";
-  std:: cout<< httpRequestMethod <<"\n";
-  std:: cout<< httpRequestURL <<"\n";
-  std:: cout<< httpHeaders<<"\n";
+    int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
+    std::cout << "Client connected\n";
 
-  
-  std::unordered_map<std::string, std::string> headersMap = getAllHeaders(httpHeaders);
-
-  
-  if(httpRequestURL.rfind("/user-agent",0) == 0) {
-    appendHeaders(plainStringResponseMessage, "Content-Length: ", std::to_string(headersMap["User-Agent"].size()));
-    
-    plainStringResponseMessage.append(clrf);
-    plainStringResponseMessage.append(headersMap["User-Agent"]);
-    send(client_fd, plainStringResponseMessage.c_str(), plainStringResponseMessage.length(), 0);
+    std::thread t1(processClient, client_fd);
+    t1.detach();
   }
-  else if(httpRequestURL.rfind("/echo/", 0) == 0) {
-    std::string stringFromEchoURL = httpRequestURL.substr(6);
-    std::cout<<"String retieved: " << stringFromEchoURL <<"\n";
-    appendHeaders(plainStringResponseMessage, "Content-Length: ", std::to_string(stringFromEchoURL.size()));
-
-    plainStringResponseMessage.append(clrf);
-    plainStringResponseMessage.append(stringFromEchoURL);
-    send(client_fd, plainStringResponseMessage.c_str(), plainStringResponseMessage.length(), 0);
-  }
-  else if(httpRequestURL.size() == 1 && httpRequestURL.compare("/") == 0) {
-    send(client_fd, okMessage.c_str(), okMessage.length(), 0);
-  }
-  else {
-    send(client_fd, notFoundMessage.c_str(), notFoundMessage.length(), 0);
-  }
+  
 
   close(server_fd);
 
